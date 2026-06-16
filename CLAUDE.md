@@ -1,3 +1,26 @@
+# CareGap Trust Planner
+
+A Databricks App (Streamlit) for the **Databricks Apps & Agents for Good Hackathon 2026**.
+It helps healthcare planners **separate real care gaps (medical deserts) from data
+uncertainty (data deserts)**, rank referral options with facility-level evidence,
+and persist human-review decisions.
+
+**Core message:** we do not turn weak data into confident recommendations — we turn
+weak data into visible uncertainty and human review.
+
+- **Full plan:** [docs/PLAN.md](docs/PLAN.md)
+- **Architecture / scoring / demo / limitations:** see `docs/`
+- **Submission copy + checklist:** [docs/devpost.md](docs/devpost.md)
+
+**Architecture rule:** Lakebase (Postgres) holds *user actions only*
+(shortlists, notes, overrides, review decisions, audit); heavy analytics live in
+Databricks SQL / Delta (`facility_scores`, `regional_gap_scores`, ...). The app
+only renders UI + persists actions. Local dev falls back to SQLite.
+
+**Run locally:** `pip install -r requirements.txt && python data/generate_synthetic.py && streamlit run app.py`
+
+---
+
 <!-- seeds:start -->
 ## Issue Tracking (Seeds)
 <!-- seeds-onboard:v0.5.10 -->
