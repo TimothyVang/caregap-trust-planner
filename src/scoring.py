@@ -32,13 +32,15 @@ PENALTIES = {
     "missing_critical": 10,
 }
 
-# Confidence mode tunes how much trust-weighted supply + confidence a region
-# needs before it is called "sufficient" vs a likely desert. Strict demands more
-# evidence (fewer false "sufficient" calls); exploratory is more permissive.
+# Confidence mode tunes how many *trustworthy* (strong/partial-evidence)
+# facilities a region needs before it is called "sufficient" vs a likely desert.
+# A COUNT (not summed weak supply) keeps the label robust to region size -- a
+# city with 300 weak-evidence facilities is NOT "sufficient". Strict demands more
+# trusted facilities + higher confidence; exploratory is more permissive.
 MODE_THRESHOLDS = {
-    "strict": {"sufficient_supply": 2.0, "conf_ok": 55, "low_supply": 1.5},
-    "balanced": {"sufficient_supply": 1.5, "conf_ok": 40, "low_supply": 1.0},
-    "exploratory": {"sufficient_supply": 1.0, "conf_ok": 30, "low_supply": 0.7},
+    "strict": {"min_trusted": 3, "conf_ok": 55},
+    "balanced": {"min_trusted": 2, "conf_ok": 40},
+    "exploratory": {"min_trusted": 1, "conf_ok": 30},
 }
 
 TRUST_LABELS = [
@@ -223,7 +225,8 @@ def score_region(facility_scores: list[dict], facilities: list[dict], mode: str 
     confidence = max(0, min(100, confidence))
     confidence_band = "High" if confidence >= 66 else "Medium" if confidence >= 40 else "Low"
 
-    desert_label = _desert_label(supply, confidence, contradiction_rate, total, mode)
+    trusted = counts["strong"] + counts["partial"]
+    desert_label = _desert_label(trusted, confidence, contradiction_rate, total, mode)
 
     return {
         "mode": mode,
@@ -244,21 +247,25 @@ def score_region(facility_scores: list[dict], facilities: list[dict], mode: str 
     }
 
 
-def _desert_label(supply: float, confidence: float, contradiction_rate: float,
+def _desert_label(trusted: int, confidence: float, contradiction_rate: float,
                   total: int, mode: str = "balanced") -> str:
+    """Classify a region. `trusted` = count of strong+partial-evidence facilities.
+
+    The point: many facilities that merely *claim* a capability with weak evidence
+    do NOT make a region 'sufficient' -- that is the data-desert vs medical-desert
+    distinction applied at the regional level.
+    """
     if total == 0:
         return "Data-poor area"
     if contradiction_rate >= 0.34:
         return "Contradictory region"
     th = MODE_THRESHOLDS.get(mode, MODE_THRESHOLDS["balanced"])
     conf_ok = confidence >= th["conf_ok"]
-    if supply >= th["sufficient_supply"] and conf_ok:
+    if trusted >= th["min_trusted"] and conf_ok:
         return "Sufficient evidence"
-    if supply < th["low_supply"] and conf_ok:
-        return "Likely care desert"
-    if supply < th["low_supply"] and not conf_ok:
-        return "Data-poor area"
-    return "Sufficient evidence" if conf_ok else "Data-poor area"
+    if not conf_ok:
+        return "Data-poor area"          # can't trust the data well enough to judge
+    return "Likely care desert"          # confident, but too few trustworthy facilities
 
 
 def _recommend(desert_label: str) -> str:

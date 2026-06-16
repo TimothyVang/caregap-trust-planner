@@ -93,7 +93,7 @@ CareGap Trust Planner helps healthcare planners and NGO coordinators make safer 
 
 ### Data Relevance
 
-CareGap Trust Planner is built for the provided 10,000-record healthcare facility dataset and to run as a Databricks App backed by Lakebase (application state) and Databricks SQL (analytics). So the public repo runs without a workspace, it ships a small **representative synthetic sample** (`data/facilities_sample.csv`, ~20 facilities) and a SQLite fallback. The scoring is dataset-agnostic: pointing `data_loader` at the Databricks SQL tables produced by `notebooks/01–04` swaps in the real dataset with no logic change.
+CareGap Trust Planner uses the **provided Virtue Foundation Dataset (DAIS 2026)** — 10,088 Indian healthcare facility records — installed in the workspace via Databricks Marketplace. The deployed app and public repo ship a **2,032-facility sample** (`data/facilities_sample.csv`, density-weighted to dense regions across Mumbai, Hyderabad, Ahmedabad, Chennai, Pune and Kolkata) to stay under the Databricks Apps 10 MB file limit; the **full table is queryable live** by setting `DATABRICKS_DATASET_TABLE` (`data_loader` then reads it via Databricks SQL — no logic change). Every facility trust score, regional gap score, and referral comes from this dataset.
 
 ### Creativity
 
@@ -109,7 +109,7 @@ The architecture keeps heavy analytics out of the app: facility and regional sco
 
 ## Limitations
 
-CareGap Trust Planner is decision support, not medical advice. Sparse data about a region or facility is not proof that care is unavailable, and every recommendation is intended for human verification before it informs a real planning decision. The public build runs on a synthetic sample dataset with a local SQLite store; wiring the provided Databricks dataset and Lakebase is the deployment step. See [docs/limitations.md](docs/limitations.md).
+CareGap Trust Planner is decision support, not medical advice. Sparse data about a region or facility is not proof that care is unavailable, and every recommendation is intended for human verification before it informs a real planning decision. The repo ships a 2,032-facility sample of the provided dataset (for the 10 MB app limit); the full 10,088-record table is queryable via `DATABRICKS_DATASET_TABLE`, and Lakebase persistence falls back to local SQLite outside Databricks. See [docs/limitations.md](docs/limitations.md).
 
 ## License
 

@@ -26,13 +26,13 @@ A low score or thin record means we **lack evidence**, not that care is **absent
 
 ---
 
-## 3. The synthetic dataset is a local placeholder
+## 3. The shipped sample is a subset of the real dataset
 
-`data/facilities_sample.csv` is a **synthetic dataset** used for local development and demos only.
+`data/facilities_sample.csv` is a **2,032-facility sample of the provided Virtue Foundation Dataset (DAIS 2026)**, density-weighted toward dense regions (Mumbai, Hyderabad, Ahmedabad, Chennai, Pune, Kolkata).
 
-- It exists so the app runs end-to-end without a Databricks workspace and so demos are reproducible.
-- The facilities, claims, and contradictions in it are **fabricated to illustrate behavior** (for example, the deliberately contradictory Pune facilities).
-- In production this is replaced by the **real Databricks dataset**. Scores, labels, and desert calls from the synthetic data carry **no real-world meaning** and must not be cited as findings about actual facilities.
+- It is a **subset**, taken to fit the Databricks Apps 10 MB file limit — the full 10,088-record table is installed in the workspace and queryable live via `DATABRICKS_DATASET_TABLE`.
+- Because it is a subset, regional gap calls reflect only the included regions; conclusions about regions **not** in the sample cannot be drawn from the shipped file.
+- Scores are computed from real but **uneven, self-reported** facility text — they are evidence signals to verify, not ground truth about what a facility can actually do.
 
 ---
 

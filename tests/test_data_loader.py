@@ -1,30 +1,44 @@
-"""Tests for data loading + the high-level region/review pipeline on sample data."""
+"""Tests for data loading + the region/review pipeline (data-agnostic).
+
+These run against whatever ships in data/facilities_sample.csv (a real Virtue
+Foundation sample). Engine correctness is pinned with synthetic fixtures in
+test_scoring / test_evidence / test_geo.
+"""
+
+from collections import Counter
 
 from src.capabilities import capability_keys
-from src.data_loader import load_facilities, regional_verdict, review_queue
+from src.data_loader import list_states, load_facilities, regional_verdict, review_queue
+
+VALID_LABELS = {
+    "Sufficient evidence", "Likely care desert",
+    "Data-poor area", "Contradictory region",
+}
 
 
 def test_sample_dataset_loads():
     facs = load_facilities()
-    assert len(facs) >= 20
-    assert "facility_id" in facs[0]
+    assert len(facs) >= 100
+    assert {"facility_id", "capability", "state", "district"} <= set(facs[0])
 
 
-def test_mumbai_is_sufficient_for_maternity():
-    mum = [f for f in load_facilities() if f["district"] == "Mumbai"]
-    v = regional_verdict(mum, "emergency_maternity")["summary"]
-    assert v["desert_label"] == "Sufficient evidence"
+def test_regional_verdict_is_valid_for_densest_region():
+    facs = load_facilities()
+    assert list_states(facs)
+    (state, district), _ = Counter(
+        (f.get("state"), f.get("district")) for f in facs
+    ).most_common(1)[0]
+    region = [f for f in facs if f.get("state") == state and f.get("district") == district]
+    summary = regional_verdict(region, "icu")["summary"]
+    assert summary["desert_label"] in VALID_LABELS
+    assert 0 <= summary["planning_confidence"] <= 100
 
 
-def test_gadchiroli_is_data_poor_for_nicu():
-    gad = [f for f in load_facilities() if f["district"] == "Gadchiroli"]
-    v = regional_verdict(gad, "nicu")["summary"]
-    assert v["desert_label"] == "Data-poor area"
-
-
-def test_review_queue_flags_suspicious_facility():
-    q = review_queue(load_facilities(), capability_keys())
-    assert any(i["facility_id"] == "MH-PUN-001" for i in q)
+def test_review_queue_shape():
+    q = review_queue(load_facilities()[:300], capability_keys())
+    assert isinstance(q, list)
+    for item in q[:5]:
+        assert {"facility_id", "capability_type", "reason", "trust_label"} <= set(item)
 
 
 def test_source_row_mapping_handles_aliases():

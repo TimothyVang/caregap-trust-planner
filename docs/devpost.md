@@ -30,7 +30,7 @@ CareGap Trust Planner gives healthcare planners a set of evidence-first tools:
 
 ### How we built it
 
-The interface is a Streamlit app built to run as a Databricks App. The scoring — facility trust scores and regional gap scores — is dataset-agnostic: the public repo runs it in-process over a representative synthetic sample so it works without a workspace, and notebooks 01-04 port the same logic to Databricks SQL/Delta for the provided 10,000-record dataset. Lakebase (Postgres) is the target store for application state (saved shortlists, review decisions, planning scenarios); the local build uses an identical SQLite schema. Either way the app compute only renders the UI and persists planner actions, keeping it light and fast.
+The interface is a Streamlit app deployed as a Databricks App on Free Edition. It runs on the provided Virtue Foundation Dataset (DAIS 2026) — 10,088 Indian healthcare facility records — installed via Databricks Marketplace. The app ships a 2,032-facility density-weighted sample (to fit the 10 MB app file limit) and can query the full table live via Databricks SQL (`DATABRICKS_DATASET_TABLE`). Facility trust scores and regional gap scores are computed from this data; Lakebase (Postgres) stores planner actions (shortlists, review decisions, scenarios), with a local SQLite fallback. The app compute only renders the UI and persists actions, keeping it light and fast.
 
 ### What makes it different
 
@@ -38,7 +38,7 @@ Most tools treat missing data as missing care. CareGap Trust Planner treats them
 
 ### Limitations
 
-This is decision support, not medical advice. Sparse data about a region is not proof that care is unavailable, and synthetic data is used in the local build. Every recommendation is meant for human verification before it informs a real planning decision.
+This is decision support, not medical advice. Sparse data about a region is not proof that care is unavailable. The repo ships a 2,032-facility sample of the provided dataset (the full 10,088-record table is queryable in Databricks). Every recommendation is meant for human verification before it informs a real planning decision.
 
 ## Built with (tags)
 
@@ -70,7 +70,7 @@ Then demo the three cases:
 
 - Decision support, not medical advice.
 - Sparse data handling: absence of evidence is not evidence of absent care.
-- The local build uses synthetic data and SQLite; Databricks uses the real dataset and Lakebase.
+- The repo ships a 2,032-facility sample of the provided dataset (10 MB app limit); the full 10,088-record table is queryable via `DATABRICKS_DATASET_TABLE`. Persistence uses SQLite (Lakebase is unavailable on Free Edition).
 
 ## Compliance checklist
 

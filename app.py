@@ -61,6 +61,12 @@ def get_facilities():
     return load_facilities()
 
 
+@st.cache_data(show_spinner="Scoring the review queue…")
+def get_review_queue():
+    # Heavy (all facilities x all capabilities); cache so the Review tab is snappy.
+    return review_queue(get_facilities(), capability_keys())
+
+
 def header():
     st.title("CareGap Trust Planner")
     st.caption("Evidence-backed healthcare planning for messy facility data")
@@ -235,7 +241,7 @@ def tab_refer(facilities):
 def tab_review(facilities):
     st.subheader("Review Data")
     st.caption("High-impact review queue — where human judgement matters most.")
-    queue = review_queue(facilities, capability_keys())
+    queue = get_review_queue()
     st.markdown(f"**{len(queue)} records** need attention.")
 
     labels = ["Strong evidence", "Partial evidence", "Weak evidence",
