@@ -99,9 +99,17 @@ def score_facility(facility: dict, capability_key: str) -> dict:
     source_url_present = int(_is_present(facility.get("source_urls")))
 
     contradiction = has_negation_contradiction(facility, capability_key)
-    # "claims capability but no procedure AND no equipment support" is also a contradiction
+    # A claim with no supporting procedure/equipment is a *contradiction* only when
+    # the record is otherwise substantiated — a public source URL or a reasonably
+    # complete record makes the missing support suspicious. For sparse records it is
+    # data-poorness, not conflict, so we do NOT call it contradictory (that is the
+    # whole point of separating data deserts from medical deserts).
     claims_without_support = bool(match["capability"]) and not (match["procedure"] or match["equipment"])
-    contradiction_flag = contradiction or claims_without_support
+    # "Substantiated" must mean *clinical* depth, not admin fields like lat/lon:
+    # a public source URL, or the capability echoed in the description/specialties.
+    # A bare capability tag with nothing else is data-poor, not a contradiction.
+    record_substantiated = bool(source_url_present or match["description"] or match["specialty"])
+    contradiction_flag = contradiction or (claims_without_support and record_substantiated)
 
     vague = has_vague_language(facility, capability_key)
     missing = _missing_fields(facility)

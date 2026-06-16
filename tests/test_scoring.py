@@ -9,9 +9,14 @@ STRONG = {
     "source_urls": "https://x", "numberDoctors": "40",
     "latitude": "19.0", "longitude": "72.8",
 }
-CLAIM_ONLY = {
+SUBSTANTIATED_CLAIM = {  # public source URL but zero supporting procedure/equipment
     "facility_id": "F2", "capability": "NICU", "procedure": "", "equipment": "",
-    "specialties": "", "description": "NICU available", "source_urls": "",
+    "specialties": "", "description": "NICU available", "source_urls": "https://x",
+    "numberDoctors": "20", "latitude": "19.0", "longitude": "72.8",
+}
+SPARSE_CLAIM = {  # thin rural record: claims a capability with no detail and no source
+    "facility_id": "F4", "capability": "NICU", "procedure": "", "equipment": "",
+    "specialties": "", "description": "", "source_urls": "",
 }
 EMPTY = {
     "facility_id": "F3", "capability": "", "procedure": "", "equipment": "",
@@ -26,10 +31,18 @@ def test_strong_facility_scores_high():
     assert s["contradiction_flag"] is False
 
 
-def test_claim_without_support_is_contradictory():
-    s = score_facility(CLAIM_ONLY, "nicu")
+def test_substantiated_claim_without_support_is_contradictory():
+    s = score_facility(SUBSTANTIATED_CLAIM, "nicu")
     assert s["contradiction_flag"] is True
     assert s["trust_label"] == "Contradictory evidence"
+
+
+def test_sparse_claim_is_data_poor_not_contradictory():
+    # The core thesis: a thin record claiming a capability is data-poor, NOT a
+    # contradiction. It must not be labeled "Contradictory evidence".
+    s = score_facility(SPARSE_CLAIM, "nicu")
+    assert s["contradiction_flag"] is False
+    assert s["trust_label"] in ("No usable evidence", "Very weak evidence", "Weak evidence")
 
 
 def test_no_evidence_scores_zero():

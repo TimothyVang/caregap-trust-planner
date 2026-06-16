@@ -30,7 +30,7 @@ CareGap Trust Planner gives healthcare planners a set of evidence-first tools:
 
 ### How we built it
 
-The interface is a Streamlit app deployed as a Databricks App. Heavy scoring — facility trust scores and regional gap scores — is precomputed in Databricks SQL/Delta tables from the provided 10,000-record healthcare facility dataset. Lakebase (Postgres) holds application state: saved shortlists, review decisions, and planning scenarios. The app compute only renders the UI and persists planner actions, keeping it light and fast.
+The interface is a Streamlit app built to run as a Databricks App. The scoring — facility trust scores and regional gap scores — is dataset-agnostic: the public repo runs it in-process over a representative synthetic sample so it works without a workspace, and notebooks 01-04 port the same logic to Databricks SQL/Delta for the provided 10,000-record dataset. Lakebase (Postgres) is the target store for application state (saved shortlists, review decisions, planning scenarios); the local build uses an identical SQLite schema. Either way the app compute only renders the UI and persists planner actions, keeping it light and fast.
 
 ### What makes it different
 

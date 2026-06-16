@@ -26,17 +26,17 @@ def test_haversine_invalid_returns_inf():
 
 def test_rank_referrals_orders_and_filters():
     far = {**ICU_STRONG, "facility_id": "B", "name": "B", "latitude": 28.6, "longitude": 77.2}
-    near_weak = {
+    near_none = {
         "facility_id": "C", "name": "C", "latitude": 19.08, "longitude": 72.88,
-        "capability": "icu", "procedure": "", "equipment": "",
-        "specialties": "", "description": "icu", "source_urls": "",
+        "capability": "general", "procedure": "", "equipment": "",
+        "specialties": "", "description": "outpatient clinic", "source_urls": "",
     }
     scored = [{"facility": f, "score": score_facility(f, "icu")}
-              for f in (ICU_STRONG, far, near_weak)]
+              for f in (ICU_STRONG, far, near_none)]
     ranked = rank_referrals(scored, 19.07, 72.87, max_km=50, min_label_rank=1)
     ids = [r["facility_id"] for r in ranked]
 
     assert "B" not in ids          # filtered: too far
-    assert "C" not in ids          # filtered: contradictory (claim w/o support)
+    assert "C" not in ids          # filtered: no usable ICU evidence
     assert ids[0] == "A"           # strong + near ranks first
     assert ranked[0]["rank"] == 1

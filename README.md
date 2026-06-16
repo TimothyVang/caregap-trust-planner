@@ -93,7 +93,7 @@ CareGap Trust Planner helps healthcare planners and NGO coordinators make safer 
 
 ### Data Relevance
 
-The app uses the provided 10,000-record healthcare facility dataset and runs as a Databricks App, backed by Lakebase for application state and Databricks SQL for analytics. The dataset drives every facility trust score, regional gap score, and referral shortlist the planner sees.
+CareGap Trust Planner is built for the provided 10,000-record healthcare facility dataset and to run as a Databricks App backed by Lakebase (application state) and Databricks SQL (analytics). So the public repo runs without a workspace, it ships a small **representative synthetic sample** (`data/facilities_sample.csv`, ~20 facilities) and a SQLite fallback. The scoring is dataset-agnostic: pointing `data_loader` at the Databricks SQL tables produced by `notebooks/01–04` swaps in the real dataset with no logic change.
 
 ### Creativity
 
@@ -105,11 +105,11 @@ Every recommendation carries its evidence. Each facility ranking shows the suppo
 
 ### Well-Architected
 
-Facility and regional scores are precomputed in Databricks SQL/Delta tables, and the app compute only renders the UI and persists user actions to Lakebase. This keeps the interactive layer responsive and inexpensive while the heavy analytics live where they belong.
+The architecture keeps heavy analytics out of the app: facility and regional scores are computed in `src/` over the data source (in-process for the local synthetic build; `notebooks/01–04` port the same logic to Databricks SQL/Delta), while the app compute only renders the UI and persists user actions to Lakebase. This keeps the interactive layer responsive and inexpensive.
 
 ## Limitations
 
-CareGap Trust Planner is decision support, not medical advice. Sparse data about a region or facility is not proof that care is unavailable, and every recommendation is intended for human verification before it informs a real planning decision. See [docs/limitations.md](docs/limitations.md).
+CareGap Trust Planner is decision support, not medical advice. Sparse data about a region or facility is not proof that care is unavailable, and every recommendation is intended for human verification before it informs a real planning decision. The public build runs on a synthetic sample dataset with a local SQLite store; wiring the provided Databricks dataset and Lakebase is the deployment step. See [docs/limitations.md](docs/limitations.md).
 
 ## License
 
