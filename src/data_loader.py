@@ -49,10 +49,10 @@ def score_facilities(facilities: list[dict], capability_key: str) -> list[dict]:
     return [{"facility": f, "score": score_facility(f, capability_key)} for f in facilities]
 
 
-def regional_verdict(facilities: list[dict], capability_key: str) -> dict:
+def regional_verdict(facilities: list[dict], capability_key: str, mode: str = "balanced") -> dict:
     """Score a region for a capability and return the planning verdict."""
     scored = score_facilities(facilities, capability_key)
-    summary = score_region([s["score"] for s in scored], facilities)
+    summary = score_region([s["score"] for s in scored], facilities, mode)
     return {"scored": scored, "summary": summary}
 
 

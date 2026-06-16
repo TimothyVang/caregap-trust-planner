@@ -33,7 +33,9 @@ CAPABILITIES: dict[str, dict] = {
     },
     "trauma": {
         "label": "Trauma",
-        "capability": ["trauma", "emergency", "casualty", "accident"],
+        # NB: "emergency" alone is too generic — it substring-matches
+        # "emergency obstetric/maternity" and falsely flags maternity hospitals.
+        "capability": ["trauma", "casualty", "accident", "trauma center", "trauma centre"],
         "procedure": ["trauma surgery", "fracture fixation", "emergency laparotomy", "wound debridement"],
         "equipment": ["ct scan", "x-ray", "operation theatre", "blood bank", "ambulance"],
         "specialty": ["orthopaedics", "orthopedics", "general surgery", "emergency medicine"],

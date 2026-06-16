@@ -32,6 +32,15 @@ PENALTIES = {
     "missing_critical": 10,
 }
 
+# Confidence mode tunes how much trust-weighted supply + confidence a region
+# needs before it is called "sufficient" vs a likely desert. Strict demands more
+# evidence (fewer false "sufficient" calls); exploratory is more permissive.
+MODE_THRESHOLDS = {
+    "strict": {"sufficient_supply": 2.0, "conf_ok": 55, "low_supply": 1.5},
+    "balanced": {"sufficient_supply": 1.5, "conf_ok": 40, "low_supply": 1.0},
+    "exploratory": {"sufficient_supply": 1.0, "conf_ok": 30, "low_supply": 0.7},
+}
+
 TRUST_LABELS = [
     (80, 100, "Strong evidence"),
     (55, 79, "Partial evidence"),
@@ -153,11 +162,12 @@ def field_completeness(facility: dict) -> float:
     return present / len(COMPLETENESS_FIELDS)
 
 
-def score_region(facility_scores: list[dict], facilities: list[dict]) -> dict:
+def score_region(facility_scores: list[dict], facilities: list[dict], mode: str = "balanced") -> dict:
     """Aggregate facility capability scores into a regional planning verdict.
 
     facility_scores: list of score_facility() dicts (all same capability/region)
     facilities:      the raw facility dicts (for completeness measurement)
+    mode:            confidence mode (strict | balanced | exploratory)
     """
     total = len(facility_scores)
     counts = {
@@ -205,9 +215,10 @@ def score_region(facility_scores: list[dict], facilities: list[dict]) -> dict:
     confidence = max(0, min(100, confidence))
     confidence_band = "High" if confidence >= 66 else "Medium" if confidence >= 40 else "Low"
 
-    desert_label = _desert_label(supply, confidence, contradiction_rate, total)
+    desert_label = _desert_label(supply, confidence, contradiction_rate, total, mode)
 
     return {
+        "mode": mode,
         "facilities_total": total,
         "strong_facilities": counts["strong"],
         "partial_facilities": counts["partial"],
@@ -225,20 +236,21 @@ def score_region(facility_scores: list[dict], facilities: list[dict]) -> dict:
     }
 
 
-def _desert_label(supply: float, confidence: float, contradiction_rate: float, total: int) -> str:
+def _desert_label(supply: float, confidence: float, contradiction_rate: float,
+                  total: int, mode: str = "balanced") -> str:
     if total == 0:
         return "Data-poor area"
     if contradiction_rate >= 0.34:
         return "Contradictory region"
-    strong_enough = supply >= 1.5
-    low_supply = supply < 1.0
-    if strong_enough and confidence >= 40:
+    th = MODE_THRESHOLDS.get(mode, MODE_THRESHOLDS["balanced"])
+    conf_ok = confidence >= th["conf_ok"]
+    if supply >= th["sufficient_supply"] and conf_ok:
         return "Sufficient evidence"
-    if low_supply and confidence >= 40:
+    if supply < th["low_supply"] and conf_ok:
         return "Likely care desert"
-    if low_supply and confidence < 40:
+    if supply < th["low_supply"] and not conf_ok:
         return "Data-poor area"
-    return "Sufficient evidence" if confidence >= 40 else "Data-poor area"
+    return "Sufficient evidence" if conf_ok else "Data-poor area"
 
 
 def _recommend(desert_label: str) -> str:

@@ -34,9 +34,14 @@ def _norm(text) -> str:
 
 
 def matched_keywords(text: str, keywords: list[str]) -> list[str]:
-    """Return the keywords that appear in text (case-insensitive)."""
+    """Return the keywords that appear in text as whole words (case-insensitive).
+
+    Word-boundary matching avoids substring false positives such as "icu"
+    matching inside "nicu", or "trauma" inside "traumatology" being fine while
+    generic tokens don't bleed across unrelated terms.
+    """
     t = _norm(text)
-    return [kw for kw in keywords if kw.lower() in t]
+    return [kw for kw in keywords if re.search(r"\b" + re.escape(kw.lower()) + r"\b", t)]
 
 
 def snippet_for(text: str, keyword: str, width: int = 60) -> str:
@@ -87,19 +92,17 @@ def has_vague_language(facility: dict, capability_key: str) -> bool:
 def has_negation_contradiction(facility: dict, capability_key: str) -> bool:
     """True if the description explicitly negates a claimed capability.
 
-    e.g. capability field lists "ICU" but description says "ICU not functional".
+    e.g. "ICU not functional" negates ICU. Scoped to the clause containing the
+    capability term, so "ICU not functional; maternity operational" negates ICU
+    but NOT maternity (the negation belongs to a different clause).
     """
     spec = CAPABILITIES.get(capability_key, {})
     desc = _norm(facility.get("description", ""))
-    cap_terms = spec.get("capability", [])
-    for term in cap_terms:
-        t = term.lower()
-        if t in desc:
-            for neg in NEGATION_TERMS:
-                # negation appearing within ~40 chars before/after the term
-                window = desc
-                i = window.find(t)
-                around = window[max(0, i - 40): i + len(t) + 40]
-                if neg in around:
-                    return True
+    if not desc:
+        return False
+    cap_terms = [t.lower() for t in spec.get("capability", [])]
+    for clause in re.split(r"[;.,]", desc):
+        has_term = any(re.search(r"\b" + re.escape(t) + r"\b", clause) for t in cap_terms)
+        if has_term and any(neg in clause for neg in NEGATION_TERMS):
+            return True
     return False

@@ -111,9 +111,10 @@ def tab_plan(facilities):
     districts = list_districts(facilities, state)
     district = col[2].selectbox("District", districts)
     mode = col[3].select_slider("Confidence mode", ["strict", "balanced", "exploratory"], value="balanced")
+    st.session_state["confidence_mode"] = mode
 
     region_facs = [f for f in facilities if f.get("state") == state and f.get("district") == district]
-    verdict = regional_verdict(region_facs, cap)
+    verdict = regional_verdict(region_facs, cap, mode)
     s = verdict["summary"]
 
     st.markdown("---")
@@ -193,7 +194,9 @@ def tab_refer(facilities):
     max_km = col[2].slider("Max distance (km)", 5, 500, 60)
     urgency = col[3].selectbox("Urgency", ["routine", "urgent", "emergency"])
     lat, lon = CITY_PRESETS[city]
-    min_rank = {"strict": 3, "balanced": 1, "exploratory": 0}["balanced"]
+    mode = st.session_state.get("confidence_mode", "balanced")
+    min_rank = {"strict": 3, "balanced": 1, "exploratory": 0}[mode]
+    st.caption(f"Evidence gate inherited from Plan tab confidence mode: **{mode}**")
 
     scored = score_facilities(facilities, cap)
     ranked = rank_referrals(scored, lat, lon, max_km, min_label_rank=min_rank)
