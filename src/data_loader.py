@@ -157,11 +157,15 @@ def review_queue(
     for f in facilities:
         for cap in capability_keys:
             s = score_facility(f, cap)
+            kind = s.get("contradiction_kind")
             reason = None
-            if s["contradiction_flag"]:
-                reason = "Claims capability but lacks the procedure/equipment that would back it"
+            # priority: 0 = explicit conflict, 1 = unsupported claim, 2 = weak-no-evidence
+            if kind == "negated":
+                reason, priority = "The description negates the claimed capability — a direct conflict.", 0
+            elif kind == "unsupported":
+                reason, priority = "Claims the capability but no procedure, equipment, or specialty backs it.", 1
             elif s["components"]["capability"] and s["trust_label"] in ("Very weak evidence", "No usable evidence"):
-                reason = "Capability mentioned with no real supporting evidence"
+                reason, priority = "Capability mentioned with no real supporting evidence.", 2
             if reason:
                 items.append({
                     "facility_id": f.get("facility_id"),
@@ -170,18 +174,16 @@ def review_queue(
                     "district": f.get("district"),
                     "capability_type": cap,
                     "trust_label": s["trust_label"],
+                    "priority": priority,
                     "reason": reason,
                     "missing": s["missing_fields"],
                     "score": s,
                     "facility": f,
                 })
-    # Contradictions first; within a tier, highest trust_score first (the most
-    # credible-looking conflicts are the costliest to leave unreviewed).
-    items.sort(key=lambda i: (
-        0 if "lacks the procedure" in i["reason"] else 1,
-        -i["score"]["trust_score"],
-        str(i["facility_id"]),
-    ))
+    # Conflicts first, then unsupported claims, then weak; within a tier the
+    # highest trust_score first (the most credible-looking flags are the costliest
+    # to leave unreviewed).
+    items.sort(key=lambda i: (i["priority"], -i["score"]["trust_score"], str(i["facility_id"])))
     total_flagged = len(items)
     capped = items[:limit]
     for i in capped:

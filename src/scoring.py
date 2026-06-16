@@ -68,6 +68,7 @@ LABEL_SUPPLY_WEIGHT = {
     "Very weak evidence": 0.1,
     "No usable evidence": 0.0,
     "Contradictory evidence": 0.0,
+    "Unsupported claim": 0.0,
 }
 
 
@@ -129,7 +130,13 @@ def score_facility(facility: dict, capability_key: str) -> dict:
     # none of those is sparse, not conflicting -- the data-desert case, which we
     # deliberately do NOT call contradictory.
     record_substantiated = bool(match["description"] or source_url_present)
-    contradiction_flag = contradiction or (claims_without_support and record_substantiated)
+    unsupported = claims_without_support and record_substantiated
+    contradiction_flag = contradiction or unsupported
+    # Two very different failure modes share the penalty but NOT the label, so the
+    # UI does not overclaim a "contradiction" when the record merely lacks backing:
+    #   * negated     — the description explicitly negates the claim (a true conflict)
+    #   * unsupported — claimed + documented, but no clinical field corroborates it
+    contradiction_kind = "negated" if contradiction else "unsupported" if unsupported else None
 
     vague = has_vague_language(facility, capability_key)
     missing = _missing_fields(facility)
@@ -148,9 +155,14 @@ def score_facility(facility: dict, capability_key: str) -> dict:
     )
     score = max(0, min(100, score))
 
-    label = "Contradictory evidence" if contradiction_flag else _label_for(score)
+    if contradiction_kind == "negated":
+        label = "Contradictory evidence"
+    elif contradiction_kind == "unsupported":
+        label = "Unsupported claim"
+    else:
+        label = _label_for(score)
 
-    explanation = _explain(match, source_url_present, contradiction_flag, vague, missing, label)
+    explanation = _explain(match, source_url_present, contradiction_kind, vague, missing, label)
 
     return {
         "facility_id": facility.get("facility_id"),
@@ -158,6 +170,7 @@ def score_facility(facility: dict, capability_key: str) -> dict:
         "trust_score": score,
         "trust_label": label,
         "contradiction_flag": contradiction_flag,
+        "contradiction_kind": contradiction_kind,
         "missing_fields": missing,
         "components": match,
         "source_url_present": bool(source_url_present),
@@ -167,15 +180,17 @@ def score_facility(facility: dict, capability_key: str) -> dict:
     }
 
 
-def _explain(match, url, contradiction, vague, missing, label) -> str:
+def _explain(match, url, contradiction_kind, vague, missing, label) -> str:
     parts = []
     hit = [k for k, v in match.items() if v]
     if hit:
         parts.append("supported by: " + ", ".join(hit))
     if url:
         parts.append("source URL present")
-    if contradiction:
-        parts.append("CONTRADICTION: claim lacks procedure/equipment support or is negated")
+    if contradiction_kind == "negated":
+        parts.append("CONFLICT: the description negates the claimed capability")
+    elif contradiction_kind == "unsupported":
+        parts.append("UNSUPPORTED: capability claimed but no procedure/equipment/specialty corroborates it")
     if vague:
         parts.append("hedged/vague language")
     if missing:
@@ -209,6 +224,7 @@ def score_region(facility_scores: list[dict], facilities: list[dict], mode: str 
         "Very weak evidence": "very_weak",
         "No usable evidence": "none",
         "Contradictory evidence": "contradictory",
+        "Unsupported claim": "contradictory",  # same "needs verification" bucket
     }
     supply = 0.0
     for s in facility_scores:

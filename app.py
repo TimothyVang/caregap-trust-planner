@@ -32,12 +32,24 @@ USER_ID = "planner"  # in Databricks, derive from the OAuth-forwarded user heade
 
 # Facility-trust colour map (point-level). Region-level uses the desert label.
 LABEL_COLOR = {
-    "Strong evidence": "#1f6feb",       # blue  = sufficient evidence
+    "Strong evidence": "#1f6feb",       # blue   = strong evidence
     "Partial evidence": "#388bfd",      # blue
     "Weak evidence": "#d29922",         # yellow = data-poor / weak
     "Very weak evidence": "#d29922",
     "No usable evidence": "#8b949e",    # grey
-    "Contradictory evidence": "#8957e5",  # purple = contradictory
+    "Unsupported claim": "#db6d28",     # orange = claimed but not corroborated
+    "Contradictory evidence": "#8957e5",  # purple = explicit conflict
+}
+# Coloured dot for expander titles (Streamlit expander labels are plain text and
+# cannot render HTML chips, so a unicode dot carries the colour cue).
+LABEL_DOT = {
+    "Strong evidence": "🔵",
+    "Partial evidence": "🔵",
+    "Weak evidence": "🟡",
+    "Very weak evidence": "🟡",
+    "No usable evidence": "⚪",
+    "Unsupported claim": "🟠",
+    "Contradictory evidence": "🟣",
 }
 DESERT_COLOR = {
     "Likely care desert": "#da3633",     # red
@@ -78,11 +90,12 @@ def header():
 def trust_legend():
     with st.expander("Trust legend", expanded=False):
         st.markdown(
-            "- **Strong evidence**: multiple fields support the claim\n"
-            "- **Partial evidence**: one clear source supports the claim\n"
-            "- **Weak evidence**: vague or indirect support\n"
-            "- **Contradictory evidence**: fields conflict\n"
-            "- **No usable evidence**: no supporting claim found"
+            "- 🔵 **Strong / Partial evidence**: clinical fields support the claim\n"
+            "- 🟡 **Weak evidence**: vague or indirect support\n"
+            "- ⚪ **No usable evidence**: no supporting claim found\n"
+            "- 🟠 **Unsupported claim**: capability is claimed and documented, but no "
+            "procedure, equipment, or specialty corroborates it (not a conflict — unverified)\n"
+            "- 🟣 **Contradictory evidence**: the description explicitly negates the claim"
         )
 
 
@@ -104,8 +117,12 @@ def evidence_drawer(score: dict):
         st.markdown("**Supporting evidence:** none found in any field.")
     if score["missing_fields"]:
         st.markdown(f"**Missing critical fields:** {', '.join(score['missing_fields'])}")
-    if score["contradiction_flag"]:
-        st.warning("Contradiction: capability is claimed without supporting procedure/equipment, or is negated in the description.")
+    kind = score.get("contradiction_kind")
+    if kind == "negated":
+        st.error("Conflict: the description explicitly negates this capability. Verify before relying on it.")
+    elif kind == "unsupported":
+        st.warning("Unsupported claim: the capability is claimed and the record is documented, "
+                   "but no procedure, equipment, or specialty corroborates it. Treat as unverified, not as a conflict.")
 
 
 # ---------------------------------------------------------------- Plan tab
@@ -131,13 +148,21 @@ def tab_plan(facilities):
             unsafe_allow_html=True,
         )
         st.metric("Planning confidence", f"{s['planning_confidence']} ({s['planning_confidence_band']})")
+        total = s["facilities_total"]
+        trusted = s["strong_facilities"] + s["partial_facilities"]
+        evidenced_pct = round(100 * trusted / total) if total else 0
         c1, c2, c3 = st.columns(3)
-        c1.metric("Facilities", s["facilities_total"])
-        c2.metric("Strong/Partial", s["strong_facilities"] + s["partial_facilities"])
-        c3.metric("Contradictory", s["contradictory_facilities"])
+        c1.metric("Facilities", total)
+        c2.metric("Evidenced (strong/partial)", trusted, f"{evidenced_pct}% of {total}", delta_color="off")
+        c3.metric("Flagged for review", s["contradictory_facilities"])
         st.markdown(f"**Data completeness:** {s['data_completeness_score']}  |  "
                     f"**Source-URL coverage:** {s['source_url_coverage']}  |  "
                     f"**Sparse-record rate:** {s['sparse_record_rate']}")
+        st.caption(
+            "Completeness and source-URL coverage describe *record metadata*, not clinical "
+            f"evidence. Only **{trusted} of {total} ({evidenced_pct}%)** facilities here show "
+            "real capability evidence — that gap is the point of the trust scoring."
+        )
         st.info(f"**Recommended next action:** {s['recommended_action']}")
     with right:
         _render_map(verdict["scored"])
@@ -152,7 +177,8 @@ def tab_plan(facilities):
     st.caption(f"Highest-trust facilities first — showing {min(25, len(ranked_facs))} of {len(ranked_facs)}.")
     for item in ranked_facs[:25]:
         f, sc = item["facility"], item["score"]
-        title = f"{f['name']} — {sc['trust_label']} ({sc['trust_score']})"
+        dot = LABEL_DOT.get(sc["trust_label"], "⚪")
+        title = f"{dot} {f['name']} — {sc['trust_label']} ({sc['trust_score']})"
         with st.expander(title):
             evidence_drawer(sc)
 
@@ -180,14 +206,20 @@ def _render_map(scored):
             p["color"] = rgb(LABEL_COLOR.get(p["label"], "#8b949e"))
         layer = pdk.Layer(
             "ScatterplotLayer", points, get_position="[lon, lat]",
-            get_fill_color="color", get_radius=2500, pickable=True, opacity=0.8,
+            get_fill_color="color", get_radius=3500, radius_min_pixels=4,
+            radius_max_pixels=40, stroked=True, get_line_color=[255, 255, 255],
+            line_width_min_pixels=1, pickable=True, opacity=0.9,
         )
         view = pdk.ViewState(
             latitude=sum(p["lat"] for p in points) / len(points),
             longitude=sum(p["lon"] for p in points) / len(points), zoom=6,
         )
-        st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view,
-                                 tooltip={"text": "{name}\n{label}"}))
+        # Light Carto basemap (no Mapbox token needed) so coloured points pop.
+        st.pydeck_chart(pdk.Deck(
+            layers=[layer], initial_view_state=view,
+            map_provider="carto", map_style="light",
+            tooltip={"text": "{name}\n{label}"},
+        ))
     except Exception:
         st.map([{"latitude": p["lat"], "longitude": p["lon"]} for p in points])
 
@@ -248,17 +280,18 @@ def tab_review(facilities):
     if total_flagged > len(queue):
         st.markdown(
             f"**Top {len(queue)} of {total_flagged:,} flagged records** "
-            "(highest-impact first; contradictions before weak-evidence claims)."
+            "(highest-impact first: explicit conflicts, then unsupported claims, then weak evidence)."
         )
     else:
         st.markdown(f"**{len(queue)} records** flagged for human review.")
 
     labels = ["Strong evidence", "Partial evidence", "Weak evidence",
-              "Contradictory evidence", "No usable evidence"]
+              "Unsupported claim", "Contradictory evidence", "No usable evidence"]
     decisions = ["Override claim", "Add note", "Mark verified", "Mark suspicious", "Send to shortlist"]
 
     for q in queue[:25]:
-        with st.expander(f"{q['name']} · {capability_label(q['capability_type'])} · {q['trust_label']}"):
+        dot = LABEL_DOT.get(q["trust_label"], "⚪")
+        with st.expander(f"{dot} {q['name']} · {capability_label(q['capability_type'])} · {q['trust_label']}"):
             st.markdown(f"**Why flagged:** {q['reason']}")
             evidence_drawer(q["score"])
             act = st.columns(3)

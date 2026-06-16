@@ -57,7 +57,8 @@ def rank_referrals(
     """
     label_rank = {
         "Strong evidence": 4, "Partial evidence": 3, "Weak evidence": 2,
-        "Very weak evidence": 1, "No usable evidence": 0, "Contradictory evidence": 0,
+        "Very weak evidence": 1, "No usable evidence": 0,
+        "Unsupported claim": 0, "Contradictory evidence": 0,
     }
     candidates = []
     for item in scored_facilities:

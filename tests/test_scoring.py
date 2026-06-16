@@ -31,9 +31,25 @@ def test_strong_facility_scores_high():
     assert s["contradiction_flag"] is False
 
 
-def test_substantiated_claim_without_support_is_contradictory():
+def test_documented_claim_without_clinical_backing_is_unsupported():
+    # Documented record (description echo + source URL) but no procedure, equipment,
+    # or specialty corroborates the claim -> "Unsupported claim", which is flagged
+    # but is NOT overclaimed as a conflict.
     s = score_facility(SUBSTANTIATED_CLAIM, "nicu")
     assert s["contradiction_flag"] is True
+    assert s["contradiction_kind"] == "unsupported"
+    assert s["trust_label"] == "Unsupported claim"
+
+
+def test_explicit_negation_is_contradictory():
+    # Only an explicit negation in the description is a true "Contradictory" label.
+    negated = {
+        "facility_id": "F7", "capability": "ICU", "procedure": "", "equipment": "",
+        "specialties": "", "description": "ICU not functional; under renovation",
+        "source_urls": "https://x",
+    }
+    s = score_facility(negated, "icu")
+    assert s["contradiction_kind"] == "negated"
     assert s["trust_label"] == "Contradictory evidence"
 
 
