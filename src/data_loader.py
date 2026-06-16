@@ -134,11 +134,24 @@ def regional_verdict(facilities: list[dict], capability_key: str, mode: str = "b
     return {"scored": scored, "summary": summary}
 
 
-def review_queue(facilities: list[dict], capability_keys: list[str]) -> list[dict]:
-    """Build the high-impact human-review queue.
+# A human review queue is only useful if it is short enough for a human to work
+# through. We surface the highest-impact records and cap the list; the regional
+# verdict (not this queue) is what summarises whole-region data quality.
+MAX_REVIEW_QUEUE = 60
 
-    Surfaces records where review matters most: contradictory claims, claims with
-    no supporting evidence, and very sparse records.
+
+def review_queue(
+    facilities: list[dict],
+    capability_keys: list[str],
+    limit: int = MAX_REVIEW_QUEUE,
+) -> list[dict]:
+    """Build the high-impact, length-capped human-review queue.
+
+    Surfaces records where review matters most: contradictory claims first
+    (highest-scoring — i.e. most credible-looking conflicts — at the top), then
+    capability claims with no real supporting evidence. The list is capped so it
+    stays actionable; `total_flagged` on each item reports the true count behind
+    the cap so nothing is silently hidden.
     """
     items: list[dict] = []
     for f in facilities:
@@ -146,7 +159,7 @@ def review_queue(facilities: list[dict], capability_keys: list[str]) -> list[dic
             s = score_facility(f, cap)
             reason = None
             if s["contradiction_flag"]:
-                reason = "Claims capability but evidence is missing or contradictory"
+                reason = "Claims capability but lacks the procedure/equipment that would back it"
             elif s["components"]["capability"] and s["trust_label"] in ("Very weak evidence", "No usable evidence"):
                 reason = "Capability mentioned with no real supporting evidence"
             if reason:
@@ -162,6 +175,15 @@ def review_queue(facilities: list[dict], capability_keys: list[str]) -> list[dic
                     "score": s,
                     "facility": f,
                 })
-    # Prioritise contradictions first.
-    items.sort(key=lambda i: (0 if "contradict" in i["reason"].lower() else 1, i["facility_id"]))
-    return items
+    # Contradictions first; within a tier, highest trust_score first (the most
+    # credible-looking conflicts are the costliest to leave unreviewed).
+    items.sort(key=lambda i: (
+        0 if "lacks the procedure" in i["reason"] else 1,
+        -i["score"]["trust_score"],
+        str(i["facility_id"]),
+    ))
+    total_flagged = len(items)
+    capped = items[:limit]
+    for i in capped:
+        i["total_flagged"] = total_flagged
+    return capped

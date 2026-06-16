@@ -34,14 +34,23 @@ PENALTIES = {
 
 # Confidence mode tunes how many *trustworthy* (strong/partial-evidence)
 # facilities a region needs before it is called "sufficient" vs a likely desert.
-# A COUNT (not summed weak supply) keeps the label robust to region size -- a
-# city with 300 weak-evidence facilities is NOT "sufficient". Strict demands more
-# trusted facilities + higher confidence; exploratory is more permissive.
+# A COUNT (not summed weak supply, and NOT a share-of-directory) is the robust
+# signal: this dataset is a mixed hospital *directory*, so the share of all
+# facilities that happen to be oncology centres is naturally small even in a
+# well-served city -- a share gate would falsely brand every metro a desert.
+# Strict demands more trusted facilities + higher confidence; exploratory is
+# more permissive.
 MODE_THRESHOLDS = {
     "strict": {"min_trusted": 3, "conf_ok": 55},
     "balanced": {"min_trusted": 2, "conf_ok": 40},
     "exploratory": {"min_trusted": 1, "conf_ok": 30},
 }
+
+# A region is only called a genuine *medical* desert when the records are
+# otherwise complete (so we trust the absence) yet show essentially no evidenced
+# supply. Below this completeness, thin supply is a *data* desert, not a medical
+# one -- so we default to "Data-poor area" rather than overclaiming scarcity.
+MIN_COMPLETENESS_FOR_DESERT = 0.6
 
 TRUST_LABELS = [
     (80, 100, "Strong evidence"),
@@ -106,11 +115,20 @@ def score_facility(facility: dict, capability_key: str) -> dict:
     # complete record makes the missing support suspicious. For sparse records it is
     # data-poorness, not conflict, so we do NOT call it contradictory (that is the
     # whole point of separating data deserts from medical deserts).
-    claims_without_support = bool(match["capability"]) and not (match["procedure"] or match["equipment"])
-    # "Substantiated" must mean *clinical* depth, not admin fields like lat/lon:
-    # a public source URL, or the capability echoed in the description/specialties.
-    # A bare capability tag with nothing else is data-poor, not a contradiction.
-    record_substantiated = bool(source_url_present or match["description"] or match["specialty"])
+    # A capability claim is "unsupported" only when NONE of the corroborating
+    # clinical fields back it -- not procedure, not equipment, AND not a matching
+    # specialty. A matching specialty IS corroboration (an obstetrics or oncology
+    # department backs a maternity/cancer claim), so it must not by itself trigger
+    # a contradiction.
+    claims_without_support = bool(match["capability"]) and not (
+        match["procedure"] or match["equipment"] or match["specialty"]
+    )
+    # The missing clinical backing is a *contradiction* (vs mere data-poorness)
+    # only when the record is otherwise documented: the capability echoed in the
+    # free-text description, or a public source URL. A bare capability tag with
+    # none of those is sparse, not conflicting -- the data-desert case, which we
+    # deliberately do NOT call contradictory.
+    record_substantiated = bool(match["description"] or source_url_present)
     contradiction_flag = contradiction or (claims_without_support and record_substantiated)
 
     vague = has_vague_language(facility, capability_key)
@@ -226,7 +244,7 @@ def score_region(facility_scores: list[dict], facilities: list[dict], mode: str 
     confidence_band = "High" if confidence >= 66 else "Medium" if confidence >= 40 else "Low"
 
     trusted = counts["strong"] + counts["partial"]
-    desert_label = _desert_label(trusted, confidence, contradiction_rate, total, mode)
+    desert_label = _desert_label(trusted, confidence, contradiction_rate, total, completeness, mode)
 
     return {
         "mode": mode,
@@ -248,12 +266,19 @@ def score_region(facility_scores: list[dict], facilities: list[dict], mode: str 
 
 
 def _desert_label(trusted: int, confidence: float, contradiction_rate: float,
-                  total: int, mode: str = "balanced") -> str:
+                  total: int, completeness: float, mode: str = "balanced") -> str:
     """Classify a region. `trusted` = count of strong+partial-evidence facilities.
 
-    The point: many facilities that merely *claim* a capability with weak evidence
-    do NOT make a region 'sufficient' -- that is the data-desert vs medical-desert
-    distinction applied at the regional level.
+    The point is the data-desert vs medical-desert distinction at the regional
+    level, and to NOT overclaim scarcity from a hospital directory that lacks a
+    population denominator:
+
+      * Sufficient evidence — enough evidenced facilities to support referrals.
+      * Likely care desert  — records are otherwise complete (we trust the
+                              absence) yet show essentially NO evidenced supply.
+      * Data-poor area      — anything ambiguous: low confidence, or some-but-too-
+                              few evidenced facilities. Default to humility.
+      * Contradictory region — conflicting records dominate; verify first.
     """
     if total == 0:
         return "Data-poor area"
@@ -263,9 +288,12 @@ def _desert_label(trusted: int, confidence: float, contradiction_rate: float,
     conf_ok = confidence >= th["conf_ok"]
     if trusted >= th["min_trusted"] and conf_ok:
         return "Sufficient evidence"
-    if not conf_ok:
-        return "Data-poor area"          # can't trust the data well enough to judge
-    return "Likely care desert"          # confident, but too few trustworthy facilities
+    # Only assert a genuine medical desert when the data is complete enough to
+    # believe the absence AND there is zero evidenced supply. Otherwise stay
+    # honest: we cannot conclude scarcity, so route to review as data-poor.
+    if conf_ok and trusted == 0 and completeness >= MIN_COMPLETENESS_FOR_DESERT:
+        return "Likely care desert"
+    return "Data-poor area"
 
 
 def _recommend(desert_label: str) -> str:

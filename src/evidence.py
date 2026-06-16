@@ -30,7 +30,15 @@ FIELD_FOR_COMPONENT = {
 def _norm(text) -> str:
     if text is None:
         return ""
-    return re.sub(r"\s+", " ", str(text)).strip().lower()
+    s = str(text)
+    # Split camelCase / compound identifiers BEFORE lowercasing so structured
+    # tokens tokenize into searchable words: this dataset's `specialties` field is
+    # a camelCase JSON array (e.g. "medicalOncology", "radiationOncology",
+    # "pediatricCardiology"), which a word-boundary search would otherwise never
+    # match against keywords like "oncology". This is general tokenisation, not
+    # row-specific tuning.
+    s = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", s)
+    return re.sub(r"\s+", " ", s).strip().lower()
 
 
 def matched_keywords(text: str, keywords: list[str]) -> list[str]:

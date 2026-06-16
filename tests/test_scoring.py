@@ -9,7 +9,7 @@ STRONG = {
     "source_urls": "https://x", "numberDoctors": "40",
     "latitude": "19.0", "longitude": "72.8",
 }
-SUBSTANTIATED_CLAIM = {  # public source URL but zero supporting procedure/equipment
+SUBSTANTIATED_CLAIM = {  # documented record (description echo + source URL) but ZERO clinical backing
     "facility_id": "F2", "capability": "NICU", "procedure": "", "equipment": "",
     "specialties": "", "description": "NICU available", "source_urls": "https://x",
     "numberDoctors": "20", "latitude": "19.0", "longitude": "72.8",
@@ -35,6 +35,33 @@ def test_substantiated_claim_without_support_is_contradictory():
     s = score_facility(SUBSTANTIATED_CLAIM, "nicu")
     assert s["contradiction_flag"] is True
     assert s["trust_label"] == "Contradictory evidence"
+
+
+def test_specialty_backed_claim_is_not_contradictory():
+    # A maternity claim backed by an obstetrics specialty is corroborated, even
+    # without the narrow procedure/equipment keywords. It must NOT be flagged as
+    # a contradiction — that was the real-data over-flagging bug.
+    specialty_backed = {
+        "facility_id": "F5", "capability": "maternity services",
+        "procedure": "", "equipment": "", "specialties": "obstetrics, gynaecology",
+        "description": "", "source_urls": "https://x",
+    }
+    s = score_facility(specialty_backed, "emergency_maternity")
+    assert s["contradiction_flag"] is False
+    assert s["components"]["specialty"] == 1
+    assert s["trust_label"] != "Contradictory evidence"
+
+
+def test_camelcase_specialty_tokens_match():
+    # The dataset's specialties are camelCase JSON tokens; "medicalOncology" must
+    # corroborate an oncology claim.
+    camel = {
+        "facility_id": "F6", "capability": "cancer care", "procedure": "",
+        "equipment": "", "specialties": '["medicalOncology","radiationOncology"]',
+        "description": "", "source_urls": "https://x",
+    }
+    s = score_facility(camel, "oncology")
+    assert s["components"]["specialty"] == 1
 
 
 def test_sparse_claim_is_data_poor_not_contradictory():

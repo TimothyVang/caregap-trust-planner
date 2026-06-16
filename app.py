@@ -244,7 +244,14 @@ def tab_review(facilities):
     st.subheader("Review Data")
     st.caption("High-impact review queue — where human judgement matters most.")
     queue = get_review_queue()
-    st.markdown(f"**{len(queue)} records** need attention.")
+    total_flagged = queue[0]["total_flagged"] if queue else 0
+    if total_flagged > len(queue):
+        st.markdown(
+            f"**Top {len(queue)} of {total_flagged:,} flagged records** "
+            "(highest-impact first; contradictions before weak-evidence claims)."
+        )
+    else:
+        st.markdown(f"**{len(queue)} records** flagged for human review.")
 
     labels = ["Strong evidence", "Partial evidence", "Weak evidence",
               "Contradictory evidence", "No usable evidence"]
