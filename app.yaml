@@ -1,0 +1,19 @@
+# Databricks Apps entry point.
+# Heavy data work runs in Databricks SQL / Lakeflow Jobs; this app only renders
+# UI and persists planner actions. Keep app files < 10 MB (no dataset shipped).
+command:
+  - streamlit
+  - run
+  - app.py
+  - --server.port
+  - "8000"
+  - --server.address
+  - "0.0.0.0"
+  - --server.headless
+  - "true"
+
+env:
+  # Lakebase connection is injected by Databricks Apps resource bindings.
+  # Locally the app falls back to SQLite when these are unset.
+  - name: LAKEBASE_DSN
+    value: ""
