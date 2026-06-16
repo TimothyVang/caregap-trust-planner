@@ -17,3 +17,8 @@ data/app_state.db
 # OS / editor
 .DS_Store
 *.swp
+
+# Test artifacts
+.coverage
+.pytest_cache/
+htmlcov/
