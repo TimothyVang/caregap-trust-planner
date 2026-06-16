@@ -148,7 +148,9 @@ def tab_plan(facilities):
     )
 
     st.markdown("#### Facilities & evidence")
-    for item in verdict["scored"]:
+    ranked_facs = sorted(verdict["scored"], key=lambda i: i["score"]["trust_score"], reverse=True)
+    st.caption(f"Highest-trust facilities first — showing {min(25, len(ranked_facs))} of {len(ranked_facs)}.")
+    for item in ranked_facs[:25]:
         f, sc = item["facility"], item["score"]
         title = f"{f['name']} — {sc['trust_label']} ({sc['trust_score']})"
         with st.expander(title):
