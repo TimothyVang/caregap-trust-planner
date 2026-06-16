@@ -26,3 +26,6 @@ htmlcov/
 # Large dataset intermediates (full export); only the <10MB sample is committed
 data/facilities_real.csv
 data/facilities_real.csv.gz
+
+# Databricks CLI sync cache
+.databricks/
