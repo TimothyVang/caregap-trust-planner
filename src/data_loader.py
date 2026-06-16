@@ -8,19 +8,97 @@ tables — the rest of the pipeline is identical because it only consumes dicts.
 from __future__ import annotations
 
 import csv
+import os
+import re
 from pathlib import Path
 
 from .scoring import score_facility, score_region
 
 DEFAULT_CSV = Path(__file__).resolve().parent.parent / "data" / "facilities_sample.csv"
 
+# Map our internal facility keys to likely source-table column names. The real
+# 10k hackathon dataset has 51 columns and different names (e.g. city vs
+# district); confirm/adjust these once the dataset is in the workspace.
+_SOURCE_ALIASES = {
+    "facility_id": ["facility_id", "id", "uuid"],
+    "name": ["name", "facility_name"],
+    "address": ["address", "addr"],
+    "state": ["state"],
+    "district": ["district", "city", "pincode", "postcode"],
+    "latitude": ["latitude", "lat"],
+    "longitude": ["longitude", "lon", "lng"],
+    "description": ["description", "desc"],
+    "capability": ["capability", "capabilities"],
+    "procedure": ["procedure", "procedures"],
+    "equipment": ["equipment"],
+    "specialties": ["specialties", "controlled_specialties", "speciality"],
+    "source_urls": ["source_urls", "source_url", "sources"],
+    "numberDoctors": ["numberDoctors", "number_doctors", "doctors"],
+    "capacity": ["capacity", "beds"],
+    "yearEstablished": ["yearEstablished", "year_established", "established"],
+}
+
 
 def load_facilities(path: str | Path = DEFAULT_CSV) -> list[dict]:
+    """Load facilities.
+
+    On Databricks (DATABRICKS_DATASET_TABLE set) read the provided dataset via
+    Databricks SQL; otherwise read the local synthetic CSV. Any Databricks error
+    falls back to the CSV so the app never hard-fails.
+    """
+    table = os.environ.get("DATABRICKS_DATASET_TABLE")
+    if table:
+        try:
+            rows = _load_from_databricks(table)
+            if rows:
+                return rows
+        except Exception as exc:  # pragma: no cover - needs a live workspace
+            print(f"[data_loader] Databricks load failed: {exc}; using local CSV")
     path = Path(path)
     if not path.exists():
         return []
     with path.open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
+
+
+def _map_source_row(row: dict) -> dict:
+    """Map a raw dataset row (lowercased keys) onto the internal facility schema."""
+    mapped = {}
+    for key, aliases in _SOURCE_ALIASES.items():
+        value = ""
+        for alias in aliases:
+            if alias.lower() in row and row[alias.lower()] not in (None, ""):
+                value = row[alias.lower()]
+                break
+        mapped[key] = value
+    if not mapped["facility_id"]:
+        mapped["facility_id"] = str(mapped.get("name", ""))[:40]
+    return mapped
+
+
+def _load_from_databricks(table: str, limit: int = 10000) -> list[dict]:  # pragma: no cover
+    """Read facility_raw-style rows from a Databricks SQL table.
+
+    Needs DATABRICKS_SERVER_HOSTNAME + DATABRICKS_HTTP_PATH and either
+    DATABRICKS_TOKEN or Apps-injected OAuth. NOTE: not yet run against the live
+    dataset — verify column names against the real table.
+    """
+    if not re.match(r"^[\w.`]+$", table):
+        raise ValueError(f"unsafe table identifier: {table!r}")
+    from databricks import sql  # databricks-sql-connector
+
+    conn = sql.connect(
+        server_hostname=os.environ["DATABRICKS_SERVER_HOSTNAME"],
+        http_path=os.environ["DATABRICKS_HTTP_PATH"],
+        access_token=os.environ.get("DATABRICKS_TOKEN"),
+    )
+    try:
+        cur = conn.cursor()
+        cur.execute(f"SELECT * FROM {table} LIMIT {int(limit)}")
+        cols = [d[0].lower() for d in cur.description]
+        return [_map_source_row(dict(zip(cols, raw))) for raw in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 def list_states(facilities: list[dict]) -> list[str]:
